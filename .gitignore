@@ -1,0 +1,12 @@
+/venv/
+
+.idea
+.idea/*
+*.xml
+*.iml
+.venv/
+.vscode/
+runs/
+corpus_info/
+from_ludwig/
+results/
