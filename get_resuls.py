@@ -10,7 +10,7 @@ from collections import defaultdict
 
 from ludwig.results import gen_param_paths
 
-from semanticmodels2.params import param2default, param2requests
+from distributionalmodels.params import param2default, param2requests
 
 LUDWIG_DATA_PATH: Optional[Path] = None
 RUNS_PATH = Path('/Volumes') / 'ludwig_data' / 'SemanticModels2' / 'runs'  # path to where runs are stored on shared drive
