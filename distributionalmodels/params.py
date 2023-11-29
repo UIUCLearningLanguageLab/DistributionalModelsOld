@@ -21,20 +21,25 @@ DSM_NAME = ['ww_matrix',    # 0
             'gpt',          # 4
             'w2v',          # 5
             ][4]
+CORPUS_NAME = ['AyB',       # 0
+               'Childes'    # 1
+               ][0]
 
 # will submit 3*2=6 jobs, each using a different learning rate and hidden sizes
 param2requests = {
     # corpus params
-    'num_AB_categories': [1],
-    'AB_category_size': [2],
-    'y_category_size': [1],
+    # 'num_AB_categories': [1],
+    # 'AB_category_size': [2],
+    # 'y_category_size': [1],
+    'sentence_sequence_rule': ['random'],
 
 
     # model params
-    'num_epochs': [200],
-    # 'learning_rate': [0.005],
-    # 'embed_size' : [64],
-    # 'embed_init_range' : [0.01],
+    'num_epochs': [5000],
+    'hidden_size': [16, 8],
+    # 'learning_rate': [0.001],
+    'embed_size': [12, 8, 6],
+    # 'embed_init_range': [0.3],
     # 'momentum': [0.0],
     # 'random_seed': [1023]
 
@@ -60,20 +65,20 @@ elif DSM_NAME == 'srn':
     param2default_dsm = {
         # architecture
         'rnn_type': 'srn',
-        'embed_size': 8,  # 64 is better than any lower
+        'embed_size': 64,  # 64 is better than any lower
         # optimization
-        'embed_init_range': 0.1,  # 0.1 is good
+        'embed_init_range': 0.3,  # 0.1 is good
         'num_epochs': 2000,  # more than 4 improves 1a and 2a accuracy, but 4 is best for 2b and 2c accuracy
-        'learning_rate': 0.2,  # 0.06 with batch_size=64
-        'momentum': 0.09,
-        'round':1
+        'learning_rate': 0.005,  # 0.06 with batch_size=64
+        'momentum': 0,
+        'round': 1
     }
 
 elif DSM_NAME == 'lstm':
     param2default_dsm = {
         # architecture
         'rnn_type': 'lstm',
-        'embed_size': 9,            # 64 is better than any lower
+        'embed_size': 64,            # 64 is better than any lower
         # optimization
         'embed_init_range': 0.001,    # 0.1 is good     # must be 0.0 with num_layers=1
         'num_epochs': 1000,            # more than 4 improves 1a and 2a accuracy, but 4 is best for 2b and 2c accuracy
@@ -92,7 +97,7 @@ elif DSM_NAME == 'w2v':
         'num_epochs': 10,
         'learning_rate': 0.025,
         'embed_init_range': 0.05,
-        'round':0,
+        'round': 0,
         'momentum': 0.0
     }
 elif DSM_NAME == 'gpt':
@@ -102,8 +107,9 @@ elif DSM_NAME == 'gpt':
         'batch_size': 1,
         'num_epochs': 200,
         'embed_size': 64,
-        'head_size': 64,
+        'hidden_size': 64,
         'num_heads': 1,
+        'num_layer': 1,
         'learning_rate': 0.0005
     }
 # [B13 . A11 y2] B12
@@ -113,40 +119,57 @@ else:
     raise NotImplementedError
 
 param2requests['dsm'] = [DSM_NAME]
+param2requests['corpus'] = [CORPUS_NAME]
 
 param2default = {
     'dsm': None,
+    'corpus': None,
     'composition_fn': 'native',
 }
 # the bigger the category omitted b should be confused with legal b
 
-param2default_corpus = {
-    'num_AB_categories': 2,
-    'AB_category_size': 3,
+if CORPUS_NAME == 'AyB':
+    param2default_corpus = {
+        'num_AB_categories': 2,
+        'AB_category_size': 3,
 
-    'x_category_size':0,
-    'y_category_size':3,
-    'z_category_size':0,
+        'x_category_size': 0,
+        'y_category_size': 3,
+        'z_category_size': 0,
 
-    'min_x_per_sentence':0,
-    'max_x_per_sentence':0,
-    'min_y_per_sentence':1,
-    'max_y_per_sentence':1,
-    'min_z_per_sentence':0,
-    'max_z_per_sentence':0,
+        'min_x_per_sentence': 0,
+        'max_x_per_sentence': 0,
+        'min_y_per_sentence': 1,
+        'max_y_per_sentence': 1,
+        'min_z_per_sentence': 0,
+        'max_z_per_sentence': 0,
 
-    'document_organization_rule':'all_pairs',
-    'document_repetitions' : 1,
-    'document_sequence_rule':'massed',
+        'document_organization_rule': 'all_pairs',
+        'document_repetitions' : 1,
+        'document_sequence_rule': 'massed',
 
-    'sentence_repetitions_per_document': 0,
-    'sentence_sequence_rule':'massed',
+        'sentence_repetitions_per_document': 0,
+        'sentence_sequence_rule': 'random',
 
-    'word_order_rule': 'fixed',
-    'include_punctuation': True,
+        'word_order_rule': 'fixed',
+        'include_punctuation': True,
 
-    'random_seed': None
-}
+        'random_seed': None
+    }
+elif CORPUS_NAME == 'Childes':
+    param2default_corpus = {
+        'input_path': "/Users/jingfengzhang/FirstYearProject/DistributionalModels/corpus_info/childes",
+        'language': "eng",
+        'collection_name': None,
+        'age_range_tuple': (0, 1000),
+        'sex_list': None,
+        'add_punctuation': False,
+        'exclude_target_child': True,
+        'get_spacy_tokens': False,
+        'num_docs': None,
+        'create_char_corpus': False,
+        'vocab_size': 512
+    }
 
 for k in param2default_corpus:
     assert k not in param2default_dsm
@@ -155,7 +178,7 @@ param2default.update(param2default_dsm)
 
 
 @dataclass
-class CorpusParams:
+class AyBCorpusParams:
     num_AB_categories: int
     AB_category_size: int
     x_category_size: int
@@ -175,6 +198,24 @@ class CorpusParams:
     word_order_rule: str
     include_punctuation: bool
     random_seed: int
+
+    @classmethod
+    def from_param2val(cls, param2val):
+        field_names = set(f.name for f in fields(cls))
+        return cls(**{k: v for k, v in param2val.items() if k in field_names})
+
+@dataclass
+class ChildesCorpusParams:
+    input_path: str
+    language: str
+    age_range_tuple: tuple
+    sex_list: list
+    collection_name: str
+    add_punctuation: bool
+    exclude_target_child: bool
+    get_spacy_tokens: bool
+    num_docs: int
+    create_char_corpus: bool
 
     @classmethod
     def from_param2val(cls, param2val):
@@ -260,8 +301,9 @@ class GPTParams:
     batch_size: int
     num_epochs: int
     embed_size: int
-    head_size: int
+    hidden_size: int
     num_heads: int
+    num_layer: int
     learning_rate: float
     
     @classmethod
@@ -272,11 +314,11 @@ class GPTParams:
 @dataclass
 class Params:
 
-    corpus_params: CorpusParams
+    corpus: str
     dsm: str
     dsm_params: WWParams
     composition_fn: str
-    composition_fn: str
+    corpus_params: AyBCorpusParams
 
     @classmethod
     def from_param2val(cls, param2val):
@@ -300,9 +342,12 @@ class Params:
             dsm_params = GPTParams.from_param2val(tmp)
         else:
             raise AttributeError(f'Invalid arg to "dsm" "{param2val["dsm"]}".')
-
-        corpus_params = CorpusParams.from_param2val(tmp)
+        if param2val['corpus'] == 'AyB':
+            corpus_params = AyBCorpusParams.from_param2val(tmp)
+        elif param2val['corpus'] == 'Childes':
+            corpus_params = ChildesCorpusParams.from_param2val(tmp)
         return cls(dsm=param2val['dsm'],
+                   corpus=param2val['corpus'],
                    composition_fn=param2val['composition_fn'],
                    corpus_params=corpus_params,
                    dsm_params=dsm_params,

@@ -51,7 +51,6 @@ class CohyponymTask(Task):
         self.mean_category_score_matrix = np.zeros([self.num_categories, self.num_categories])
         self.confusion_matrix = np.zeros([self.num_categories, self.num_categories])
 
-        print("Computing Balanced Accuracy")
         self.threshold_list = np.linspace(-1, 1, self.num_thresholds)
         self.load_categories()
         self.create_results_df()
@@ -181,7 +180,7 @@ class CohyponymTask(Task):
         if exclude_symmetric_pairs:
             self.guess_accuracy_df = self.guess_accuracy_df[
                 self.guess_accuracy_df['target1_index'] < self.guess_accuracy_df['target2_index']]
-        self.guess_accuracy_df = self.guess_accuracy_df.applymap(lambda x: round_and_check(x, 2))
+        self.guess_accuracy_df = self.guess_accuracy_df.map(lambda x: round_and_check(x, 2))
 
         # Group by threshold and target1_index, and calculate the mean and standard deviation of correct for each group
         self.target_accuracy_df = self.guess_accuracy_df.groupby(['threshold',
@@ -211,5 +210,5 @@ class CohyponymTask(Task):
         self.best_target_ba_df = self.target_ba_df[self.target_ba_df['threshold'] == max_mean_ba_threshold].reset_index()
         self.best_category_ba_df = self.best_target_ba_df.groupby(['category', 'threshold'])['ba'].agg(['mean', 'std', 'count']).reset_index()
         self.best_category_ba_df.columns = ['category', 'best_overall_threshold', 'ba_mean', 'ba_std', 'n']
-        self.best_category_ba_df = self.best_category_ba_df.applymap(lambda x: round_and_check(x, 2))
+        self.best_category_ba_df = self.best_category_ba_df.map(lambda x: round_and_check(x, 2))
         self.guess_accuracy_best_df = self.guess_accuracy_df[self.guess_accuracy_df['threshold']==self.best_category_ba_df['best_overall_threshold'].unique()[0]]

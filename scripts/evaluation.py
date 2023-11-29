@@ -20,16 +20,15 @@ np.set_printoptions(formatter={'float': '{: 0.3f}'.format}, linewidth=np.inf)
 
 class Evaluation:
     def __init__(self, average_over_models=False):
-        model_type = 'gpt'
+        model_type = 'srn'
         LUDWIG_DATA_PATH: Optional[Path] = None
         RUNS_PATH = Path('/Users/jingfengzhang/FirstYearProject/DistributionalModels/runs')
-        # RUNS_PATH = Path('/Users/jingfengzhang/FirstYearProject/SemanticModels2/from_ludwig/{}/runs'.format(model_type))
-        self.export_path = Path('/Users/jingfengzhang/FirstYearProject/DistributionalModels/results/{}'.format(model_type))
+        self.export_path = Path(
+            '/Users/jingfengzhang/FirstYearProject/DistributionalModels/results/{}'.format(model_type))
         self.export_path.mkdir(exist_ok=True)
         # config.Dirs.runs if loading runs locally or None if loading data from ludwig
 
         project_name = "DistributionalModels"
-        # model_type = 'word2vec'
 
         dsms_syntagmatictask_using_weights_df_list = []
         self.dsms_syntagmatictask_using_sum_outputs_df_list = []
@@ -38,6 +37,7 @@ class Evaluation:
         self.dsms_cohyponymtask_using_hidden_df_list = []
         self.dsms_weight_similarity_matrix_list = []
         self.dsms_hidden_similarity_matrix_list = []
+        self.dsms_output_similarity_matrix_list = []
         self.category_colnames = {'0': 'Period', '1': 'Present A', '2': 'Omitted A', '3': 'Legal As', '4': 'Illegal As',
                                   '5': 'Present B', '6': 'Omitted B', '7': 'Legal Bs', '8': 'Illegal Bs', '9': 'y'}
         self.dsm_list = []
@@ -59,64 +59,47 @@ class Evaluation:
 
             if model_type == 'w2v':
                 self.dsm_list, self.checkpoint_list, corpus = W2Vec.from_pretrained(param_path)
-                dsm_info = [self.dsm_list[0].params.num_epochs, self.dsm_list[0].params.learning_rate,
-                            self.dsm_list[0].params.embed_size,
-                            self.dsm_list[0].params.embed_init_range, self.dsm_list[0].params.momentum,
-                            self.dsm_list[0].params.round]
-                for dsm in self.dsm_list:
-                    dsm_weight_list.append(dsm.model.embed.weight.clone().detach().numpy())
-                    dsm_output_activation_list.append(get_output_activation(dsm, model_type))
-                    dsm_hidden_activation_list.append(get_hidden_activation(dsm, model_type))
+                self.dsm_info = [self.dsm_list[0].params.num_epochs, self.dsm_list[0].params.learning_rate,
+                                 self.dsm_list[0].params.embed_size,
+                                 self.dsm_list[0].params.embed_init_range, self.dsm_list[0].params.momentum,
+                                 self.dsm_list[0].params.round]
+                for w2v in self.dsm_list:
+                    dsm_weight_list.append(w2v.model.embed.weight.clone().detach().numpy())
+                    w2v_outputs, w2v_hiddens = get_representations_from_w2v(w2v)
+                    dsm_output_activation_list.append(w2v_outputs)
+                    dsm_hidden_activation_list.append(w2v_hiddens)
             elif model_type == 'srn':
                 self.dsm_list, self.checkpoint_list, corpus = SRN.from_pretrained(param_path)
-                dsm_info = [self.dsm_list[0].params.num_epochs, self.dsm_list[0].params.learning_rate,
-                            self.dsm_list[0].params.embed_size,
-                            self.dsm_list[0].params.embed_init_range, self.dsm_list[0].params.momentum,
-                            self.dsm_list[0].params.round]
-                for dsm in self.dsm_list:
-                    dsm_weight_list.append(dsm.model.h_x.weight.clone().detach().numpy().transpose(1, 0))
-                    dsm_output_activation_list.append(get_output_activation(dsm, model_type))
-                    dsm_hidden_activation_list.append(get_hidden_activation(dsm, model_type))
+                self.dsm_info = [self.dsm_list[0].params.num_epochs, self.dsm_list[0].params.learning_rate,
+                                 self.dsm_list[0].params.embed_size,
+                                 self.dsm_list[0].params.embed_init_range, self.dsm_list[0].params.momentum,
+                                 self.dsm_list[0].params.round]
+                for srn in self.dsm_list:
+                    srn_outputs, srn_hiddens = get_representations_from_srn(srn)
+                    dsm_output_activation_list.append(srn_outputs)
+                    dsm_hidden_activation_list.append(srn_hiddens)
+                    dsm_weight_list.append(srn.model.h_x.weight.clone().detach().numpy().transpose(1, 0))
             elif model_type == 'lstm':
                 self.dsm_list, self.checkpoint_list, corpus = LSTM.from_pretrained(param_path)
-                dsm_info = [self.dsm_list[0].params.num_epochs, self.dsm_list[0].params.learning_rate,
-                            self.dsm_list[0].params.embed_size,
-                            self.dsm_list[0].params.embed_init_range, self.dsm_list[0].params.momentum,
-                            self.dsm_list[0].params.round]
-                for dsm in self.dsm_list:
-                    dsm_weight_list.append(dsm.model.wx.weight.clone().detach().numpy())
-                    dsm_output_activation_list.append(get_output_activation(dsm, model_type))
-                    dsm_hidden_activation_list.append(get_hidden_activation(dsm, model_type))
+                self.dsm_info = [self.dsm_list[0].params.num_epochs, self.dsm_list[0].params.learning_rate,
+                                 self.dsm_list[0].params.embed_size,
+                                 self.dsm_list[0].params.embed_init_range, self.dsm_list[0].params.momentum,
+                                 self.dsm_list[0].params.round]
+                for lstm in self.dsm_list:
+                    dsm_weight_list.append(lstm.model.wx.weight.clone().detach().numpy())
+                    lstm_outputs, lstm_hiddens = get_representations_from_lstm(lstm)
+                    dsm_output_activation_list.append(lstm_outputs)
+                    dsm_hidden_activation_list.append(lstm_hiddens)
             elif model_type == 'gpt':
                 self.dsm_list, self.checkpoint_list, corpus = GPT.from_pretrained(param_path)
                 self.dsm_info = [self.dsm_list[0].params.num_epochs, self.dsm_list[0].params.learning_rate,
-                        self.dsm_list[0].params.embed_size, self.dsm_list[0].params.block_size,
-                        self.dsm_list[0].params.head_size, self.dsm_list[0].params.round]
+                                 self.dsm_list[0].params.embed_size, self.dsm_list[0].params.block_size,
+                                 self.dsm_list[0].params.head_size, self.dsm_list[0].params.round]
                 for gpt in self.dsm_list:
-                    gpt_outputs, gpt_multihead_outputs = get_representations_from_gpt(gpt)
+                    gpt_outputs, gpt_multihead_outputs, gpt_weights = get_representations_from_gpt(gpt)
                     dsm_output_activation_list.append(gpt_outputs)
                     dsm_hidden_activation_list.append(gpt_multihead_outputs)
-
-            for i in range(len(corpus.numeric_document_sentence_list[0])):
-                current_sequence_test_category_array = np.array(corpus.sequence_test_category_list[i])
-                print(len(self.dsm_list))
-                category_dict = {list(self.dsm_list[0].id_vocab_dict.values())[j]: current_sequence_test_category_array[j]
-                                 for j in range(self.dsm_list[0].vocab_size)}
-                category_label_list = corpus.category_label_list
-                reverse_dict = {}
-                for key, value in category_dict.items():
-                    if value not in reverse_dict:
-                        reverse_dict[value] = [key]
-                    else:
-                        reverse_dict[value].append(key)
-
-                # # Sort the dictionary by its keys
-                sorted_reverse_dict = {k: reverse_dict[k] for k in sorted(reverse_dict)}
-                labeled_dict = {category_label_list[k]: v for k, v in sorted_reverse_dict.items()}
-                print(
-                    f'current sentence: {[self.dsm_list[0].id_vocab_dict[token] for token in corpus.numeric_document_sentence_list[0][i]]}')
-                for value, keys in labeled_dict.items():
-                    print(f"Category: {value}, Tokens: {keys}")
+                    dsm_weight_list.append(gpt_weights)
 
             self.current_dir = str(self.export_path) + '/{}_{}_{}_{}_{}_{}'.format(self.dsm_info[0], self.dsm_info[1],
                                                                                    self.dsm_info[2], self.dsm_info[3],
@@ -126,30 +109,26 @@ class Evaluation:
             dsm_weight_similarity_matrix_list = list(
                 map(lambda embed_matrix: create_similarity_matrix(embed_matrix, 'corrcoef'), dsm_weight_list))
             self.dsms_weight_similarity_matrix_list.append(dsm_weight_similarity_matrix_list)
+
             dsm_hidden_similarity_matrix_list = list(
                 map(lambda embed_matrix: create_similarity_matrix(embed_matrix, 'corrcoef'),
                     dsm_hidden_activation_list))
             self.dsms_hidden_similarity_matrix_list.append(dsm_hidden_similarity_matrix_list)
-            category_files = list(param_path.rglob('**/paradigmatic_categories_{}.csv'.format(corpus.corpus_name)))
+
+            dsm_output_similarity_matrix_list = list(
+                map(lambda embed_matrix: create_similarity_matrix(embed_matrix, 'corrcoef'),
+                    dsm_output_activation_list))
+            self.dsms_output_similarity_matrix_list.append(dsm_hidden_similarity_matrix_list)
+
             self.combine_and_export_data(dsm_weight_similarity_matrix_list, self.checkpoint_list,
                                          self.current_dir + '/combined_weights_from_different_checkpoints.csv')
             self.combine_and_export_data(dsm_hidden_similarity_matrix_list, self.checkpoint_list,
                                          self.current_dir + '/combined_hidden_from_different_checkpoints.csv')
             self.combine_and_export_data(dsm_output_activation_list, self.checkpoint_list,
                                          self.current_dir + '/combined_outputs_from_different_checkpoints.csv')
-            self.words = list(self.dsm_list[0].vocab_dict.keys())
-            self.groups = [[], [], []]
-            for word in self.words:
-                if word[0] == 'A':
-                    self.groups[0].append(word)
-                elif word[0] == 'B':
-                    self.groups[1].append(word)
-                else:
-                    self.groups[2].append(word)
-            plot_similarity_matrices(dsm_weight_similarity_matrix_list, 'weight', self.checkpoint_list, self.words,
-                                     self.groups, self.current_dir)
-            plot_similarity_matrices(dsm_hidden_similarity_matrix_list, 'hidden', self.checkpoint_list, self.words,
-                                     self.groups, self.current_dir)
+            self.combine_and_export_data(dsm_output_similarity_matrix_list, self.checkpoint_list,
+                                         self.current_dir + '/combined_outputs_sim_from_different_checkpoints.csv')
+
 
             dsm_cohyponymtask_using_weights_list = [[] for x in range(3)]
             dsm_cohyponymtask_using_hidden_activation_list = [[] for x in range(3)]
@@ -159,13 +138,15 @@ class Evaluation:
             dsm_syntagmatictask_using_mean_outputs_list = [[] for x in range(3)]
             for i in range(len(self.checkpoint_list)):
                 cohyponymtask_using_weights = CohyponymTask(corpus.paradigmatic_word_category_dict,
-                                                            dsm_weight_similarity_matrix_list[i], dsm.vocab_dict)
+                                                            dsm_weight_similarity_matrix_list[i],
+                                                            self.dsm_list[i].vocab_id_dict)
+                mean_acivtation_weights, sum_acivtation_weights, guess_accuracies_weights = evaluate_srn(
+                    self.checkpoint_list[i], self.dsm_list[i], cohyponymtask_using_weights)
                 cohyponymtask_using_hidden = CohyponymTask(corpus.paradigmatic_word_category_dict,
                                                            dsm_hidden_similarity_matrix_list[i], dsm.vocab_dict)
-                # cohyponymtask_using_outputs = CohyponymTask(category_files[0], dsm_output_activation_list[i] , dsm.vocab_dict)
-                # dsm_cohyponymtask_using_weights_list.append(CohyponymTask(corpus.paradigmatic_word_category_dict, dsm_weight_similarity_matrix_list[i] , dsm.vocab_dict))
-                # dsm_cohyponymtask_using_hidden_activation_list.append(CohyponymTask(category_files[0], dsm_hidden_similarity_matrix_list[i] , dsm.vocab_dict))
-                # dsm_cohyponymtask_using_output_activation_list.append(CohyponymTask(category_files[0], dsm_output_activation_list[i] , dsm.vocab_dict))
+                mean_acivtation_weights, sum_acivtation_weights, guess_accuracies_weights = evaluate_srn(
+                    self.checkpoint_list[i], self.dsm_list[i], cohyponymtask_using_hidden)
+
                 mean_acivtation_weights, sum_acivtation_weights, guess_accuracies_weights = evaluate_model(
                     self.dsm_list[i], model_type, self.checkpoint_list[i], corpus.numeric_token_sequence_list,
                     corpus.sequence_test_category_list, dsm_weight_similarity_matrix_list[i],

@@ -82,6 +82,8 @@ class LSTM:
         self.vocab_size = self.corpus.vocabulary_size
         self.vocab_id_dict = corpus.vocab_id_dict
         self.id_vocab_dict = corpus.id_vocab_dict
+        self.encode = lambda s: [self.vocab_id_dict[v] for v in s]
+        self.decode = lambda l: [self.id_vocab_dict[i] for i in l]
         self.numeric_document_list = copy.deepcopy(self.corpus.numeric_document_list)
 
         self.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')

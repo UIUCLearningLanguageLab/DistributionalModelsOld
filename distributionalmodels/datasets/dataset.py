@@ -8,10 +8,10 @@ class Dataset:
         self.index_vocab_dict = None
         self.numeric_document_list = None
         self.numeric_document_sentence_list = None
-        self.encode = lambda s: [self.vocab_id_dict[v] for v in s]
-        self.decode = lambda l: [self.id_vocab_dict[i] for i in l]
+
 
     def export_corpus_as_file(self, path):
+        decode = lambda l: [self.id_vocab_dict[i] for i in l]
         # with open("datasets/{}_corpus.txt".format(corpus_name), 'w') as f:
         for idx, doc in enumerate(self.numeric_document_sentence_list):
             # Create a unique filename for each document.
@@ -20,7 +20,7 @@ class Dataset:
             with open(filename, mode='w', newline='') as f:
                 for document in self.numeric_document_sentence_list:
                     for sentence in document:
-                        f.write(str(self.decode(sentence)))
+                        f.write(str(decode(sentence)))
                         f.write("\n")
             
 

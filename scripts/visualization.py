@@ -3,14 +3,15 @@ import numpy as np
 from sklearn.manifold import TSNE
 import plotly.graph_objects as go
 import seaborn as sn
+import matplotlib
 import matplotlib.pyplot as plt
-from statistics import mean
 from adjustText import adjust_text
-import random
 
 markers = ['o', 's', '^', 'v', 'd', 'p', 'h', '8', '>']
-categories = ['Present A', 'Omitted A', 'Legal As', 'Illegal As', 'Present B', 'Omitted B', 'Legal Bs', 'Illegal Bs', 'y']
+categories = ['Present A', 'Omitted A', 'Legal As', 'Illegal As', 'Present B', 'Omitted B', 'Legal Bs', 'Illegal Bs',
+              'y']
 color_cycle = plt.rcParams['axes.prop_cycle'].by_key()['color']
+
 
 def visualization_with_tsne(embeddings, vocab):
     # get embeddings
@@ -38,16 +39,17 @@ def visualization_with_tsne(embeddings, vocab):
     )
     fig.write_html("../word2vec_visualization.html")
 
-def plot_confusion_matrix(confusion_matrix, index, columns, fig_savepath):
-    df_cm = pd.DataFrame(confusion_matrix, index = [i for i in index],
-                  columns = [i for i in columns])
-    plt.figure(figsize = (10,7))
-    sn.heatmap(df_cm, annot=True)
+
+def plot_confusion_matrix(confusion_matrix, fig_savepath):
+    plt.figure(figsize=(10, 7))
+    ax = sn.heatmap(confusion_matrix, annot=True, vmin=-1, vmax=1)
+    ax.xaxis.tick_top()
     plt.savefig(fig_savepath)
     plt.clf()
 
+
 def plot_prediction_accuracy(sum_df, mean_df, fig_savepath):
-    fig, axs = plt.subplots(2,2, sharex=False, sharey=False, figsize=(10,10))
+    fig, axs = plt.subplots(2, 2, sharex=False, sharey=False, figsize=(10, 10))
     for column in range(2):
         if column == 0:
             grouped_df = sum_df.groupby(sum_df.input)
@@ -55,7 +57,7 @@ def plot_prediction_accuracy(sum_df, mean_df, fig_savepath):
         else:
             grouped_df = mean_df.groupby(mean_df.input)
             title = 'Mean Output Activations'
-        for row in range (2):
+        for row in range(2):
             texts = []
             j = 0
             df_input = None
@@ -69,22 +71,23 @@ def plot_prediction_accuracy(sum_df, mean_df, fig_savepath):
                 x = df_input.checkpoint
                 y = df_input[label]
                 axs[row, column].plot(x, y, label=label, color=color)
-                pos_x = x.iloc[round(len(x)*0.8)]
-                pos_y = y.iloc[round(len(x)*0.8)]
-                texts.append(axs[row, column].annotate(label, xy=(pos_x, pos_y),fontsize=10, color=color))
+                pos_x = x.iloc[round(len(x)-1 * 0.8)]
+                pos_y = y.iloc[round(len(x)-1 * 0.8)]
+                texts.append(axs[row, column].annotate(label, xy=(pos_x, pos_y), fontsize=10, color=color))
             axs[row, column].set_ylabel('Output Activation', fontsize=13)
             axs[row, column].set_xlabel('Epochs', fontsize=13)
             # axs[row, column].legend(loc = 'upper right', prop={'size':10})
             axs[row, column].set_ylim(-0.1, 1.1)
             axs[row, column].set_yticks(np.arange(0, 1.1, 0.1))
-            adjust_text(texts, ax=axs[row,column], expand_text=(1.2, 1.2),only_move={'points':'xy', 'text':'x'})
-            
+            adjust_text(texts, ax=axs[row, column], expand_text=(1.2, 1.2), only_move={'points': 'xy', 'text': 'x'})
+
     plt.subplots_adjust(wspace=0.2, hspace=0.2)
     plt.tight_layout(pad=1.0, w_pad=0.5, h_pad=0.9)
     plt.savefig(fig_savepath)
     plt.clf()
 
-def plot_similarity_matrices(list_of_matrices, measure,checkpoint_lists, words, groups, fig_savepath):
+
+def plot_similarity_matrices(list_of_matrices, measure, checkpoint_lists, words, groups, fig_savepath):
     num_words = len(words)
     num_checkpoints = len(list_of_matrices)
 
@@ -101,12 +104,13 @@ def plot_similarity_matrices(list_of_matrices, measure,checkpoint_lists, words, 
             ax = axes[i]
             ax.set_title(f"Similarity of word {word} with other words")
             # Find the three most similar and three most dissimilar words in the last checkpoint
-            similarities_last_checkpoint = list_of_matrices[-1][word_index].copy()  # Make a copy to avoid modifying the original matrix
+            similarities_last_checkpoint = list_of_matrices[-1][
+                word_index].copy()  # Make a copy to avoid modifying the original matrix
 
             sorted_indices = np.argsort(similarities_last_checkpoint)
-            top_similar_indices = sorted_indices[-6:-1] 
+            top_similar_indices = sorted_indices[-6:-1]
             bottom_similar_indices = sorted_indices[:3]
-            
+
             for j in np.concatenate((top_similar_indices, bottom_similar_indices)):
                 similarities = [matrix[word_index, j] for matrix in list_of_matrices]
                 ax.plot(checkpoint_lists, similarities, label=words[j])
@@ -125,7 +129,7 @@ def plot_similarity_matrices(list_of_matrices, measure,checkpoint_lists, words, 
 
 
 def plot_cohyponym_score(df_w, df_h, fig_savepath):
-    fig, axs = plt.subplots(2, 2,  sharex=False, sharey=False,figsize=(10,10))
+    fig, axs = plt.subplots(2, 2, sharex=False, sharey=False, figsize=(10, 10))
     for column in range(2):
         if column == 0:
             grouped_df = df_w.groupby(df_w.input)
@@ -133,13 +137,13 @@ def plot_cohyponym_score(df_w, df_h, fig_savepath):
         else:
             grouped_df = df_h.groupby(df_h.input)
             title = 'Paradigmatic Task Using Hidden Activation'
-        for row in range (2):
+        for row in range(2):
             df_input = None
             texts = []
             if row == 0:
                 df_input = grouped_df.get_group('A')
                 axs[row, column].set_title(title, fontsize=15)
-            
+
             else:
                 df_input = grouped_df.get_group('B')
             for i, color in zip(range(len(categories)), color_cycle):
@@ -147,17 +151,48 @@ def plot_cohyponym_score(df_w, df_h, fig_savepath):
                 x = df_input.checkpoint
                 y = df_input[label]
                 axs[row, column].plot(x, y, label=label, color=color)
-                pos_x = x.iloc[round(len(x)*0.8)]
-                pos_y = y.iloc[round(len(x)*0.8)]
-                texts.append(axs[row, column].annotate(label, xy=(pos_x, pos_y),fontsize=10, color=color))
+                pos_x = x.iloc[round(len(x)-1 * 0.8)]
+                pos_y = y.iloc[round(len(x)-1 * 0.8)]
+                texts.append(axs[row, column].annotate(label, xy=(pos_x, pos_y), fontsize=10, color=color))
             axs[row, column].set_ylabel('Percentage', fontsize=13)
             axs[row, column].set_xlabel('Epochs', fontsize=13)
             # axs[row, column].legend(loc = 'upper right', prop={'size':10})
             axs[row, column].set_ylim(-0.1, 1.1)
             axs[row, column].set_yticks(np.arange(0, 1.1, 0.1))
-            adjust_text(texts, ax=axs[row,column], expand_text=(1.2, 1.2),only_move={'points':'xy', 'text':'xy'})
+            adjust_text(texts, ax=axs[row, column], expand_text=(1.2, 1.2), only_move={'points': 'xy', 'text': 'xy'})
     plt.subplots_adjust(wspace=0.2, hspace=0.2)
     plt.tight_layout(pad=1.0, w_pad=0.5, h_pad=0.9)
     plt.savefig(fig_savepath)
     plt.clf()
 
+
+def plot_sim_score(df, type, fig_savepath):
+    fig, axs = plt.subplots(2, 1, sharex=False, sharey=False, figsize=(10, 10))
+    grouped_df = df.groupby(df.input)
+    title = f'Paradigmatic Task Using {type}'
+    for row in range(2):
+        texts = []
+        if row == 0:
+            df_input = grouped_df.get_group('A')
+            axs[row].set_title(title, fontsize=15)
+
+        else:
+            df_input = grouped_df.get_group('B')
+        for i, color in zip(range(len(categories)), color_cycle):
+            label = categories[i]
+            x = df_input.checkpoint
+            y = df_input[label]
+            axs[row].plot(x, y, label=label, color=color)
+            pos_x = x.iloc[round(len(x)-1 * 0.8)]
+            pos_y = y.iloc[round(len(x)-1 * 0.8)]
+            texts.append(axs[row].annotate(label, xy=(pos_x, pos_y), fontsize=10, color=color))
+        axs[row].set_ylabel('Percentage', fontsize=13)
+        axs[row].set_xlabel('Epochs', fontsize=13)
+        # axs[row, column].legend(loc = 'upper right', prop={'size':10})
+        axs[row].set_ylim(-1.1, 1.1)
+        axs[row].set_yticks(np.arange(-1, 1.1, 0.1))
+        adjust_text(texts, ax=axs[row], expand_text=(1.2, 1.2), only_move={'points': 'xy', 'text': 'xy'})
+    plt.subplots_adjust(wspace=0.2, hspace=0.2)
+    plt.tight_layout(pad=1.0, w_pad=0.5, h_pad=0.9)
+    plt.savefig(fig_savepath)
+    plt.clf()

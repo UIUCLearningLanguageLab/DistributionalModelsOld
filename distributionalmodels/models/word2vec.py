@@ -48,7 +48,6 @@ class W2Vec:
                               params.corpus_params.document_repetitions,
                               params.corpus_params.document_sequence_rule,
                               params.corpus_params.sentence_repetitions_per_document,
-
                               'random',
                               params.corpus_params.word_order_rule,
                               params.corpus_params.include_punctuation,
@@ -90,6 +89,8 @@ class W2Vec:
         self.vocab_size = corpus.vocabulary_size
         self.vocab_id_dict = corpus.vocab_id_dict
         self.id_vocab_dict = corpus.id_vocab_dict
+        self.encode = lambda s: [self.vocab_id_dict[v] for v in s]
+        self.decode = lambda l: [self.id_vocab_dict[i] for i in l]
 
         self.numeric_document_list = copy.deepcopy(corpus.numeric_document_list)
 
@@ -177,7 +178,10 @@ class W2Vec:
 
             self.lr_scheduler.step()
 
-            if epoch % output_freq == 0:
+            if epoch <= 100 or (100 < epoch <= 500 and epoch % 5 == 0) or (
+                    500 < epoch <= 1000 and epoch % 10 == 0) or (
+                    1000 < epoch <= 10000 and epoch % 25 == 0) or (
+                    10000 < epoch <= 20000 and epoch % 50 == 0):
                 self.performance['epoch'].append(epoch)
                 pp_train = self.calc_pp(train_target_context_pairs, shuffle=False)
                 self.performance['pp_train'].append(pp_train)

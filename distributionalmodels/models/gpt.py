@@ -10,6 +10,7 @@ from pathlib import Path
 import random
 import yaml
 import os
+import numpy as np
 
 
 class GPT:
@@ -42,7 +43,7 @@ class GPT:
                               params.corpus_params.document_sequence_rule,
                               params.corpus_params.sentence_repetitions_per_document,
 
-                              'random',
+                              'massed',
                               params.corpus_params.word_order_rule,
                               params.corpus_params.include_punctuation,
                               params.corpus_params.random_seed
@@ -79,10 +80,10 @@ class GPT:
         self.corpus = corpus
         self.vocab_id_dict = corpus.vocab_id_dict
         self.id_vocab_dict = corpus.id_vocab_dict
-        self.vocab_size = corpus.vocabulary_size
-        self.numeric_document_list = copy.deepcopy(corpus.numeric_document_list)
         self.encode = lambda s: [self.vocab_id_dict[v] for v in s]
         self.decode = lambda l: [self.id_vocab_dict[i] for i in l]
+        self.vocab_size = corpus.vocabulary_size
+        self.numeric_document_list = copy.deepcopy(corpus.numeric_document_list)
 
         self.block_size = self.params.block_size
         self.batch_size = self.params.batch_size
@@ -90,16 +91,17 @@ class GPT:
         self.eval_interval = 10
         self.save_path = save_path
         self.performance = defaultdict(list)
-
-        for document in self.numeric_document_list:
-            print(f'Full document{document}')
+        #
+        # for document in self.numeric_document_list:
+        #     print(f'Full document{document[:10]}')
 
         self.model = BigramLanguageModel(self.vocab_size,
                                          self.params.embed_size,
                                          self.block_size,
-                                         self.params.head_size,
+                                         self.params.hidden_size,
                                          self.params.num_heads,
                                          self.device)
+        self.model.to(device=self.device)
 
         for contexts, targets in self.get_batch(self.numeric_document_list):
             logits, loss, o_prob = self.model(contexts, targets)
@@ -137,7 +139,7 @@ class GPT:
         self.model.train()
         for contexts, targets in self.get_batch(numeric_document_list):
             logits, loss, o_prob = self.model(contexts, targets)
-            self.optimizer.zero_grad(set_to_none=True)
+            self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
 
@@ -159,24 +161,27 @@ class GPT:
                 if prediction == target_sequences[i]:
                     correctness += 1
 
-            # print(self.decode(input_sequences))
+            print(self.decode(input_sequences))
 
-            # for input, prediction, target in zip(self.decode(input_sequences), self.decode(predictions),
-            #                                      self.decode(target_sequences)):
-            #     print(f"Item: {input}, Predicted: {prediction}, Target: {target}")
+            for input, prediction, target in zip(self.decode(input_sequences), self.decode(predictions),
+                                                 self.decode(target_sequences)):
+                print(f"Item: {input}, Predicted: {prediction}, Target: {target}")
         print(f'accuracy: {correctness/(total_seq * self.block_size)}')
 
     @torch.no_grad()
     def get_multihead_outputs(self, numeric_document_list):
         self.multihead_outputs = []
+        self.attention_weights = []
         self.model.eval()
         multihead_forward_hook = self.model.sa_head.register_forward_hook(self.multihead_forward_hook)
         multihead_inputs = []
+        o_probs = []
         for contexts, targets in self.get_batch(numeric_document_list):
             logits, loss, o_prob = self.model(contexts, targets)
             multihead_inputs.append(contexts)
+            o_probs.append(o_prob)
         multihead_forward_hook.remove()
-        return self.multihead_outputs, multihead_inputs
+        return self.multihead_outputs, self.attention_weights, multihead_inputs, o_probs
 
     @torch.no_grad()
     def get_kqv_outputs(self, numeric_document_list):
@@ -199,7 +204,6 @@ class GPT:
         return self.key_outputs, self.query_outputs, self.value_outputs, inputs
 
     def train(self):
-        self.model.to(self.device)
         self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=self.params.learning_rate)
         save_index = 0
         for epoch in range(self.params.num_epochs):
@@ -217,15 +221,17 @@ class GPT:
             if self.corpus.sentence_sequence_rule == 'massed':
                 final_numeric_document_sentence_list = numeric_document_sentence_list
 
+            # += instead of append
             final_numeric_document_list = \
                 [[token for sentence in doc for token in sentence] for doc in final_numeric_document_sentence_list]
             if epoch % self.eval_interval == 0:
                 print(f"epoch {epoch}: train loss {self.evaluate(final_numeric_document_list):.4f}")
             self.train_epoch(final_numeric_document_list)
-            if epoch <= 100 or (100 < epoch <= 500 and epoch % 5 == 0) or (
-                    500 < epoch <= 1000 and epoch % 10 == 0) or (
-                    1000 < epoch <= 10000 and epoch % 25 == 0) or (
-                    10000 < epoch <= 20000 and epoch % 50 == 0):
+            # if epoch <= 100 or (100 < epoch <= 500 and epoch % 5 == 0) or (
+            #         500 < epoch <= 1000 and epoch % 10 == 0) or (
+            #         1000 < epoch <= 10000 and epoch % 25 == 0) or (
+            #         10000 < epoch <= 20000 and epoch % 50 == 0):
+            if epoch % 1000 == 0:
                 self.save_model(epoch, save_index)
                 save_index += 1
         self.test(self.numeric_document_list)
@@ -240,7 +246,9 @@ class GPT:
 
     # register forward hook
     def multihead_forward_hook(self, module, input, output):
-        self.multihead_outputs.append(output)
+        combined_output, attention_weight = output
+        self.multihead_outputs.append(combined_output)
+        self.attention_weights.append(attention_weight)
 
     def key_hook(self, module, input, output):
         self.key_outputs.append(output)
@@ -251,18 +259,20 @@ class GPT:
     def value_hook(self, module, input, output):
         self.value_outputs.append(output)
 
+
+
 class BigramLanguageModel(nn.Module):
-    def __init__(self, vocab_size, embed_size, block_size, head_size, num_head, device):
+    def __init__(self, vocab_size, embed_size, block_size, hidden_size, num_head, device):
         super().__init__()
         # self.vocab_size = vocab_size
         # self.embed_size = embed_size
         # self.block_size = block_size
         self.device = device
-        self.token_embeddings_table = nn.Embedding(vocab_size, embed_size)
-        self.position_embeddings_table = nn.Embedding(block_size, embed_size)
+        self.token_embeddings_table = nn.Embedding(vocab_size, embed_size).to(self.device)
+        self.position_embeddings_table = nn.Embedding(block_size, embed_size).to(self.device)
         self.sa_head = MultiHeadAttention(num_head, embed_size // num_head, embed_size, block_size)
-        self.ffwd = FeedForward(embed_size)
-        self.lm_head = nn.Linear(embed_size, vocab_size)
+        self.ffwd = FeedForward(embed_size, hidden_size)
+        self.lm_head = nn.Linear(hidden_size, vocab_size)
 
     def forward(self, idx, targets):
         B, T = idx.shape
@@ -270,7 +280,7 @@ class BigramLanguageModel(nn.Module):
         token_embed = self.token_embeddings_table(idx)  # (Batch*Time*embed_size)
         position_embed = self.position_embeddings_table(torch.arange(T, device=self.device))
         x = token_embed + position_embed
-        x = self.sa_head(x)
+        x, attention_weights = self.sa_head(x)
         x = self.ffwd(x)
         logits = self.lm_head(x)  # (Batch*Time*vocab_size)
         B, T, C = logits.shape
@@ -289,15 +299,17 @@ class Head(nn.Module):
         self.query = nn.Linear(embed_size, head_size, bias=False)
         self.value = nn.Linear(embed_size, head_size, bias=False)
         self.register_buffer('tril', torch.tril(torch.ones(block_size, block_size)))
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.pre_mask_attention_weights = None
 
     def forward(self, x):
         B, T, C = x.shape
         k = self.key(x)  # (B ,T, C)
         q = self.query(x)  # (B ,T, C)
         v = self.value(x)  # (B ,T, C)
-
-        # wei = q @ k.transpose(-2, -1) * C**-0.5 # scaled attention, original in paper "attention is all you neeed"
+        # wei = q @ k.transpose(-2, -1) * C**-0.5 # scaled attention, original in paper "attention is all you need"
         wei = q @ k.transpose(-2, -1) * C ** -0.5  # (B ,T, C) @  (B, C, T) -> (B, T, T)
+        self.pre_mask_attention_weights = wei.clone()
         wei = wei.masked_fill(self.tril[:T, :T] == 0, float('-inf'))  # (B, T, T)
         wei = F.softmax(wei, dim=1)  # (B, T, T)
 
@@ -311,13 +323,27 @@ class MultiHeadAttention(nn.Module):
         self.heads = nn.ModuleList([Head(head_size, embed_size, block_size) for i in range(num_heads)])
 
     def forward(self, x):
-        return torch.cat([h(x) for h in self.heads], dim=-1)
+        attention_weights_list = []
+        head_outputs = []
+        for head in self.heads:
+            head_output = head(x)
+            head_outputs.append(head_output)
+
+            # Assuming pre_mask_attention_weights are stored in each head
+            attention_weights_list.append(head.pre_mask_attention_weights)
+
+        # Concatenating the outputs from all heads
+        combined_output = torch.cat(head_outputs, dim=-1)
+
+        # Average the attention weights across all heads
+        combined_attention_weights = torch.cat(attention_weights_list, dim=-1)
+        return combined_output, combined_attention_weights
 
 
 class FeedForward(nn.Module):
-    def __init__(self, embed_size):
+    def __init__(self, embed_size, hidden_size):
         super().__init__()
-        self.net = nn.Sequential(nn.Linear(embed_size, embed_size), nn.ReLU())
+        self.net = nn.Sequential(nn.Linear(embed_size, hidden_size), nn.ReLU())
 
     def forward(self, x):
         return self.net(x)
