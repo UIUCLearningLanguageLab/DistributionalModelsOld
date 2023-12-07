@@ -118,39 +118,59 @@ def get_representations_from_gpt(gpt: GPT):
     output_activations = np.array(activations)
 
     # get multi-attention head outputs from gpt
-    multihead_outputs, attention_weights, multihead_inputs, o_probs = \
-        gpt.get_multihead_outputs(gpt.numeric_document_list)
+    input_activations, hidden_activations, multihead_outputs, attention_weights, inputs, o_probs = \
+        gpt.get_embeds(gpt.numeric_document_list)
     # Process captured data in multihead_outputs to update the dictionaries
+    input_shape = input_activations[0].shape[2:]
+    hidden_shape = hidden_activations[0].shape[2:]
     output_shape = multihead_outputs[0].shape[2:]
     attention_shape = attention_weights[0].shape[2:]
-    accumulated_outputs = defaultdict(lambda: torch.zeros(output_shape))
-    accumulated_weights = defaultdict(lambda: torch.zeros(attention_shape))
+
+    accumulated_inputs = defaultdict(lambda: torch.zeros(input_shape))
+    accumulated_hiddens = defaultdict(lambda: torch.zeros(hidden_shape))
+    accumulated_attention_outputs = defaultdict(lambda: torch.zeros(output_shape))
+    accumulated_attention_weights = defaultdict(lambda: torch.zeros(attention_shape))
     accumulated_oprobs = defaultdict(lambda: torch.zeros(output_shape))
     counts = defaultdict(int)
-    for i, batch_output_data in enumerate(multihead_outputs):
-        batch_input_data = multihead_inputs[i]
-        batch_weight_data = attention_weights[i]
-        for b in range(batch_output_data.shape[0]):  # Loop over the batch dimension
+    for i, batch_attention_output_data in enumerate(multihead_outputs):
+        batch_input_data = inputs[i]
+        batch_attention_weight_data = attention_weights[i]
+        batch_input_activation_data = input_activations[i]
+        batch_hidden_activation_data = hidden_activations[i]
+        for b in range(batch_attention_output_data.shape[0]):  # Loop over the batch dimension
             input_data = batch_input_data[b]
-            output_data = batch_output_data[b]
-            weight_data = batch_weight_data[b]
+            attention_output_data = batch_attention_output_data[b]
+            attention_weight_data = batch_attention_weight_data[b]
+            input_activation_data = batch_input_activation_data[b]
+            hidden_activation_data = batch_hidden_activation_data[b]
             for j, item in enumerate(input_data):  # Loop over the sequence/window
-                accumulated_outputs[input_data[j].item()] += output_data[j]
-                accumulated_weights[input_data[j].item()] += weight_data[j]
+                accumulated_attention_outputs[input_data[j].item()] += attention_output_data[j]
+                accumulated_attention_weights[input_data[j].item()] += attention_weight_data[j]
+                accumulated_inputs[input_data[j].item()] += input_activation_data[j]
+                accumulated_hiddens[input_data[j].item()] += hidden_activation_data[j]
                 counts[input_data[j].item()] += 1
 
     # Compute the averages
     temp_averaged_outputs = {}
     temp_averaged_weights = {}
-    for item, tensor in accumulated_outputs.items():
+    temp_averaged_input_activation = {}
+    temp_averaged_hidden_activation = {}
+    for item, tensor in accumulated_attention_outputs.items():
         temp_averaged_outputs[item] = tensor / counts[item]
-        temp_averaged_weights[item] = accumulated_weights[item] / counts[item]
+        temp_averaged_weights[item] = accumulated_attention_weights[item] / counts[item]
+        temp_averaged_input_activation[item] = accumulated_inputs[item] / counts[item]
+        temp_averaged_hidden_activation[item] = accumulated_hiddens[item] / counts[item]
 
     averaged_outputs = dict(sorted(temp_averaged_outputs.items()))
     averaged_weights = dict(sorted(temp_averaged_weights.items()))
+    averaged_inputs = dict(sorted(temp_averaged_input_activation.items()))
+    averaged_hiddens = dict(sorted(temp_averaged_hidden_activation.items()))
     averaged_outputs_matrix = np.array(list(averaged_outputs.values()))
     averaged_weights_matrix = np.array(list(averaged_weights.values()))
-    return output_activations, averaged_outputs_matrix, averaged_weights_matrix
+    averaged_inputs_matrix = np.array(list(averaged_inputs.values()))
+    averaged_hiddens_matrix = np.array(list(averaged_hiddens.values()))
+    return output_activations, averaged_outputs_matrix, averaged_weights_matrix, \
+           averaged_inputs_matrix, averaged_hiddens_matrix
 
 
 def evaluate_srn(checkpoint, srn: SRN, cohyponymtask: CohyponymTask):

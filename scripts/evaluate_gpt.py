@@ -30,17 +30,25 @@ class GPTEvaluation:
         self.gpts_syntagmatictask_using_mean_outputs_df_list = []
         self.gpts_syntagmatictask_using_weights_df_list = []
         self.gpts_syntagmatictask_using_hidden_df_list = []
+        self.gpts_syntagmatictask_using_inputs_df_list = []
+        self.gpts_syntagmatictask_using_attention_outputs_df_list = []
+
         self.gpts_cohyponymtask_using_weights_df_list = []
         self.gpts_cohyponymtask_using_hidden_df_list = []
         self.gpts_cohyponymtask_using_outputs_df_list = []
 
+
         self.gpts_sim_score_using_weights_df_list = []
         self.gpts_sim_score_using_hidden_df_list = []
         self.gpts_sim_score_using_outputs_df_list = []
+        self.gpts_sim_score_using_inputs_df_list = []
+        self.gpts_sim_score_using_attention_outputs_df_list = []
 
         self.gpts_weight_similarity_matrix_list = []
         self.gpts_hidden_similarity_matrix_list = []
         self.gpts_output_similarity_matrix_list = []
+        self.gpts_attention_similarity_matrix_list = []
+        self.gpts_input_similarity_matrix_list = []
 
         self.category_colnames = {'0': 'Period', '1': 'Present A', '2': 'Omitted A', '3': 'Legal As', '4': 'Illegal As',
                                   '5': 'Present B', '6': 'Omitted B', '7': 'Legal Bs', '8': 'Illegal Bs', '9': 'y'}
@@ -58,21 +66,30 @@ class GPTEvaluation:
             # load models and embeddings
             gpt_weight_list = []
             gpt_hidden_activation_list = []
+            gpt_input_activation_list = []
+            gpt_attention_outputs_list = []
             gpt_output_activation_list = []
 
             self.gpt_list, self.checkpoint_list, corpus = GPT.from_pretrained(param_path)
             self.gpt_info = [self.gpt_list[0].params.num_epochs, self.gpt_list[0].params.learning_rate,
-                             self.gpt_list[0].params.embed_size, self.gpt_list[0].params.block_size,
-                             self.gpt_list[0].params.hidden_size, self.gpt_list[0].params.round]
+                             self.gpt_list[0].params.block_size, self.gpt_list[0].params.embed_size,
+                             self.gpt_list[0].params.attention_size, self.gpt_list[0].params.hidden_size,
+                             self.gpt_list[0].params.round]
             for gpt in self.gpt_list:
-                gpt_outputs, gpt_multihead_outputs, gpt_weights = get_representations_from_gpt(gpt)
+                gpt_outputs, gpt_multihead_outputs, gpt_weights, gpt_inputs, gpt_hiddens = get_representations_from_gpt(gpt)
                 gpt_output_activation_list.append(gpt_outputs)
-                gpt_hidden_activation_list.append(gpt_multihead_outputs)
+                gpt_hidden_activation_list.append(gpt_hiddens)
+                gpt_input_activation_list.append(gpt_inputs)
+                gpt_attention_outputs_list.append(gpt_multihead_outputs)
                 gpt_weight_list.append(gpt_weights)
 
-            self.current_dir = str(self.export_path) + '/{}_{}_{}_{}_{}_{}'.format(self.gpt_info[0], self.gpt_info[1],
-                                                                                   self.gpt_info[2], self.gpt_info[3],
-                                                                                   self.gpt_info[4], self.gpt_info[5])
+            self.current_dir = str(self.export_path) + '/{}_{}_{}_{}_{}_{}_{}'.format(self.gpt_info[0],
+                                                                                      self.gpt_info[1],
+                                                                                      self.gpt_info[2],
+                                                                                      self.gpt_info[3],
+                                                                                      self.gpt_info[4],
+                                                                                      self.gpt_info[5],
+                                                                                      self.gpt_info[6])
             os.makedirs(self.current_dir, exist_ok=True)
             gpt_weight_similarity_matrix_list = list(
                 map(lambda embed_matrix: create_similarity_matrix(embed_matrix, 'corrcoef'), gpt_weight_list))
@@ -88,6 +105,16 @@ class GPTEvaluation:
                     gpt_output_activation_list))
             self.gpts_output_similarity_matrix_list.append(gpt_output_similarity_matrix_list)
 
+            gpt_attention_output_similarity_matrix_list = list(
+                map(lambda embed_matrix: create_similarity_matrix(embed_matrix, 'corrcoef'),
+                    gpt_attention_outputs_list))
+            self.gpts_attention_similarity_matrix_list.append(gpt_attention_output_similarity_matrix_list)
+
+            gpt_input_similarity_matrix_list = list(
+                map(lambda embed_matrix: create_similarity_matrix(embed_matrix, 'corrcoef'),
+                    gpt_input_activation_list))
+            self.gpts_input_similarity_matrix_list.append(gpt_input_similarity_matrix_list)
+
             self.combine_and_export_data(gpt_weight_similarity_matrix_list, self.checkpoint_list,
                                          self.current_dir + '/combined_weights_sim_from_different_checkpoints.csv')
             self.combine_and_export_data(gpt_hidden_similarity_matrix_list, self.checkpoint_list,
@@ -96,94 +123,154 @@ class GPTEvaluation:
                                          self.current_dir + '/combined_outputs_from_different_checkpoints.csv')
             self.combine_and_export_data(gpt_output_similarity_matrix_list, self.checkpoint_list,
                                          self.current_dir + '/combined_outputs_sim_from_different_checkpoints.csv')
+            self.combine_and_export_data(gpt_attention_output_similarity_matrix_list, self.checkpoint_list,
+                                         self.current_dir + '/combined_attention_outputs_sim_from_different_checkpoints.csv')
+            self.combine_and_export_data(gpt_input_similarity_matrix_list, self.checkpoint_list,
+                                         self.current_dir + '/combined_input_sim_from_different_checkpoints.csv')
             vocab_list = list(self.gpt_list[0].vocab_id_dict.keys())
             hidden_sim_df = pd.DataFrame(np.round(gpt_hidden_similarity_matrix_list[-1], decimals=3),
                                          columns=vocab_list, index=vocab_list)
 
+            for index, similarity_matrix_list in enumerate([gpt_input_similarity_matrix_list, gpt_weight_similarity_matrix_list,
+                                           gpt_hidden_similarity_matrix_list, gpt_attention_output_similarity_matrix_list,
+                                           gpt_output_similarity_matrix_list,
+                                           ]):
 
-            gpt_cohyponymtask_using_weights_list = [[] for x in range(3)]
-            gpt_cohyponymtask_using_hidden_activation_list = [[] for x in range(3)]
-            gpt_cohyponymtask_using_output_activation_list = [[] for x in range(3)]
-            gpt_sim_score_using_weights_list = [[] for x in range(3)]
-            gpt_sim_score_using_hidden_activation_list = [[] for x in range(3)]
-            gpt_sim_score_using_output_activation_list = [[] for x in range(3)]
-            gpt_syntagmatictask_using_weights_list = [[] for x in range(3)]
-            gpt_syntagmatictask_using_hidden_list = [[] for x in range(3)]
-            gpt_syntagmatictask_using_sum_outputs_list = [[] for x in range(3)]
-            gpt_syntagmatictask_using_mean_outputs_list = [[] for x in range(3)]
-            for i in tqdm(range(len(self.checkpoint_list))):
-                cohyponymtask_using_weights = CohyponymTask(corpus.paradigmatic_word_category_dict,
-                                                            gpt_weight_similarity_matrix_list[i],
-                                                            self.gpt_list[i].vocab_id_dict)
-                mean_acivtation_weights, sum_acivtation_weights, guess_accuracies_weights, sim_scores_weights = evaluate_gpt(
-                    self.checkpoint_list[i], self.gpt_list[i], cohyponymtask_using_weights)
+                gpts_result_lists = [(self.gpts_syntagmatictask_using_inputs_df_list,
+                                      self.gpts_sim_score_using_inputs_df_list),
+                                     (self.gpts_syntagmatictask_using_weights_df_list,
+                                      self.gpts_sim_score_using_weights_df_list),
+                                     (self.gpts_syntagmatictask_using_hidden_df_list,
+                                      self.gpts_sim_score_using_hidden_df_list),
+                                     (self.gpts_syntagmatictask_using_attention_outputs_df_list,
+                                      self.gpts_sim_score_using_attention_outputs_df_list),
+                                     (self.gpts_syntagmatictask_using_mean_outputs_df_list,
+                                      self.gpts_sim_score_using_outputs_df_list)]
+                measurement_list = ['inputs', 'weights', 'hiddens', 'attention_outputs', 'outputs']
 
-                cohyponymtask_using_hidden = CohyponymTask(corpus.paradigmatic_word_category_dict,
-                                                           gpt_hidden_similarity_matrix_list[i],
-                                                           self.gpt_list[i].vocab_id_dict)
-                mean_acivtation_hidden, sum_acivtation_hidden, guess_accuracies_hidden, sim_scores_hidden = evaluate_gpt(
-                    self.checkpoint_list[i], self.gpt_list[i], cohyponymtask_using_hidden)
+                gpt_cohyponymtask_list = [[] for x in range(3)]
+                gpt_sim_score_list = [[] for x in range(3)]
+                gpt_syntagmatictask_list = [[] for x in range(3)]
 
-                cohyponymtask_using_outputs = CohyponymTask(corpus.paradigmatic_word_category_dict,
-                                                            gpt_output_similarity_matrix_list[i],
-                                                            self.gpt_list[i].vocab_id_dict)
-                mean_acivtation_outputs, sum_acivtation_outputs, guess_accuracies_outputs, sim_scores_outputs = evaluate_gpt(
-                    self.checkpoint_list[i], self.gpt_list[i], cohyponymtask_using_outputs)
+                for i in tqdm(range(len(self.checkpoint_list))):
+                    cohyponymtask = CohyponymTask(corpus.paradigmatic_word_category_dict,
+                                                    similarity_matrix_list[i],
+                                                    self.gpt_list[i].vocab_id_dict)
+                    mean_acivtation, sum_acivtation, guess_accuracies, sim_scores = evaluate_gpt(
+                        self.checkpoint_list[i], self.gpt_list[i], cohyponymtask)
 
-                for j in range(3):
-                    gpt_syntagmatictask_using_weights_list[j].append(mean_acivtation_weights[j])
-                    gpt_syntagmatictask_using_hidden_list[j].append(mean_acivtation_hidden[j])
-                    gpt_syntagmatictask_using_sum_outputs_list[j].append(sum_acivtation_outputs[j])
-                    gpt_syntagmatictask_using_mean_outputs_list[j].append(mean_acivtation_outputs[j])
+                    for j in range(3):
+                        gpt_syntagmatictask_list[j].append(mean_acivtation[j])
 
-                    gpt_cohyponymtask_using_weights_list[j].append(guess_accuracies_weights[j])
-                    gpt_cohyponymtask_using_hidden_activation_list[j].append(guess_accuracies_hidden[j])
-                    gpt_cohyponymtask_using_output_activation_list[j].append(guess_accuracies_outputs[j])
+                        gpt_cohyponymtask_list[j].append(guess_accuracies[j])
 
-                    gpt_sim_score_using_weights_list[j].append(sim_scores_weights[j])
-                    gpt_sim_score_using_hidden_activation_list[j].append(sim_scores_hidden[j])
-                    gpt_sim_score_using_output_activation_list[j].append(sim_scores_outputs[j])
+                        gpt_sim_score_list[j].append(sim_scores[j])
 
-                if i == len(self.checkpoint_list) - 1:
-                    cohyponymtask_using_weights.guess_accuracy_best_df.to_csv(
-                        self.current_dir + '/weight_guess_accuracy.csv')
-                    cohyponymtask_using_hidden.guess_accuracy_best_df.to_csv(
-                        self.current_dir + '/hidden_guess_accuracy.csv')
-                    cohyponymtask_using_outputs.guess_accuracy_best_df.to_csv(
-                        self.current_dir + '/outputs_guess_accuracy.csv')
+                temp_gpts_syntagmatictask_df = self.merge_data_from_checkpoints(
+                    gpt_syntagmatictask_list, gpts_result_lists[index][0])
+                temp_gpts_sim_score_df = self.merge_data_from_checkpoints(
+                    gpt_sim_score_list, gpts_result_lists[index][1])
+                print(len(gpts_result_lists[index][0]))
 
-            temp_gpts_cohyponymtask_using_weights_df = self.merge_data_from_checkpoints(
-                gpt_cohyponymtask_using_weights_list, self.gpts_cohyponymtask_using_weights_df_list)
-            temp_gpts_cohyponymtask_using_hidden_df = self.merge_data_from_checkpoints(
-                gpt_cohyponymtask_using_hidden_activation_list, self.gpts_cohyponymtask_using_hidden_df_list)
-            temp_gpts_cohyponymtask_using_outputs_df = self.merge_data_from_checkpoints(
-                gpt_cohyponymtask_using_output_activation_list, self.gpts_cohyponymtask_using_outputs_df_list)
+                if measurement_list[index] == 'outputs':
+                    plot_prediction_accuracy(temp_gpts_syntagmatictask_df,
+                                             self.current_dir + '/sum_prediction_activation_outputs_plot.png')
 
-            temp_gpts_sim_score_using_hidden_df = self.merge_data_from_checkpoints(
-                gpt_sim_score_using_hidden_activation_list, self.gpts_sim_score_using_hidden_df_list)
-            temp_gpts_sim_score_using_weights_df = self.merge_data_from_checkpoints(
-                gpt_sim_score_using_weights_list, self.gpts_sim_score_using_weights_df_list)
-            temp_gpts_sim_score_using_outputs_df = self.merge_data_from_checkpoints(
-                gpt_sim_score_using_output_activation_list, self.gpts_sim_score_using_outputs_df_list)
+                plot_sim_score(temp_gpts_sim_score_df, measurement_list[index],
+                                self.current_dir + f'/{measurement_list[index]}_sim_score_plot.png')
 
-            temp_gpts_syntagmatictask_using_sum_outputs_df = self.merge_data_from_checkpoints(
-                gpt_syntagmatictask_using_sum_outputs_list, self.gpts_syntagmatictask_using_sum_outputs_df_list)
-            temp_gpts_syntagmatictask_using_mean_outputs_df = self.merge_data_from_checkpoints(
-                gpt_syntagmatictask_using_mean_outputs_list, self.gpts_syntagmatictask_using_mean_outputs_df_list)
-            temp_gpts_syntagmatictask_using_weights_df = self.merge_data_from_checkpoints(
-                gpt_syntagmatictask_using_weights_list, self.gpts_syntagmatictask_using_weights_df_list)
-            temp_gpts_syntagmatictask_using_hidden_df = self.merge_data_from_checkpoints(
-                gpt_syntagmatictask_using_hidden_list, self.gpts_syntagmatictask_using_hidden_df_list)
+                # plot_confusion_matrix(hidden_sim_df, self.current_dir + '/confusion_matrix_plot.png')
+                i += 1
 
-            plot_prediction_accuracy(temp_gpts_syntagmatictask_using_sum_outputs_df,
-                                     temp_gpts_syntagmatictask_using_mean_outputs_df,
-                                     self.current_dir + '/sum_prediction_activation_outputs_plot.png')
-            plot_cohyponym_score(temp_gpts_cohyponymtask_using_weights_df, temp_gpts_cohyponymtask_using_hidden_df,
-                                 self.current_dir + '/cohyponym_plot.png')
-            plot_sim_score(temp_gpts_sim_score_using_hidden_df, 'hidden', self.current_dir + '/sim_score_plot.png')
-            plot_confusion_matrix(hidden_sim_df, self.current_dir + '/confusion_matrix_plot.png')
 
-            i += 1
+
+            # gpt_cohyponymtask_using_weights_list = [[] for x in range(3)]
+            # gpt_cohyponymtask_using_hidden_activation_list = [[] for x in range(3)]
+            # gpt_cohyponymtask_using_output_activation_list = [[] for x in range(3)]
+            # gpt_sim_score_using_weights_list = [[] for x in range(3)]
+            # gpt_sim_score_using_hidden_activation_list = [[] for x in range(3)]
+            # gpt_sim_score_using_output_activation_list = [[] for x in range(3)]
+            # gpt_sim_score_using_inputs_list = [[] for x in range(3)]
+            # gpt_sim_score_using_attention_outputs_list = [[] for x in range(3)]
+            # gpt_syntagmatictask_using_weights_list = [[] for x in range(3)]
+            # gpt_syntagmatictask_using_hidden_list = [[] for x in range(3)]
+            # gpt_syntagmatictask_using_sum_outputs_list = [[] for x in range(3)]
+            # gpt_syntagmatictask_using_mean_outputs_list = [[] for x in range(3)]
+            # for i in tqdm(range(len(self.checkpoint_list))):
+            #
+            #     cohyponymtask_using_weights = CohyponymTask(corpus.paradigmatic_word_category_dict,
+            #                                                 gpt_weight_similarity_matrix_list[i],
+            #                                                 self.gpt_list[i].vocab_id_dict)
+            #     mean_acivtation_weights, sum_acivtation_weights, guess_accuracies_weights, sim_scores_weights = evaluate_gpt(
+            #         self.checkpoint_list[i], self.gpt_list[i], cohyponymtask_using_weights)
+            #
+            #     cohyponymtask_using_hidden = CohyponymTask(corpus.paradigmatic_word_category_dict,
+            #                                                gpt_hidden_similarity_matrix_list[i],
+            #                                                self.gpt_list[i].vocab_id_dict)
+            #     mean_acivtation_hidden, sum_acivtation_hidden, guess_accuracies_hidden, sim_scores_hidden = evaluate_gpt(
+            #         self.checkpoint_list[i], self.gpt_list[i], cohyponymtask_using_hidden)
+            #
+            #     cohyponymtask_using_outputs = CohyponymTask(corpus.paradigmatic_word_category_dict,
+            #                                                 gpt_output_similarity_matrix_list[i],
+            #                                                 self.gpt_list[i].vocab_id_dict)
+            #     mean_acivtation_outputs, sum_acivtation_outputs, guess_accuracies_outputs, sim_scores_outputs = evaluate_gpt(
+            #         self.checkpoint_list[i], self.gpt_list[i], cohyponymtask_using_outputs)
+            #
+            #
+            #     for j in range(3):
+            #         gpt_syntagmatictask_using_weights_list[j].append(mean_acivtation_weights[j])
+            #         gpt_syntagmatictask_using_hidden_list[j].append(mean_acivtation_hidden[j])
+            #         gpt_syntagmatictask_using_sum_outputs_list[j].append(sum_acivtation_outputs[j])
+            #         gpt_syntagmatictask_using_mean_outputs_list[j].append(mean_acivtation_outputs[j])
+            #
+            #         gpt_cohyponymtask_using_weights_list[j].append(guess_accuracies_weights[j])
+            #         gpt_cohyponymtask_using_hidden_activation_list[j].append(guess_accuracies_hidden[j])
+            #         gpt_cohyponymtask_using_output_activation_list[j].append(guess_accuracies_outputs[j])
+            #
+            #         gpt_sim_score_using_weights_list[j].append(sim_scores_weights[j])
+            #         gpt_sim_score_using_hidden_activation_list[j].append(sim_scores_hidden[j])
+            #         gpt_sim_score_using_output_activation_list[j].append(sim_scores_outputs[j])
+            #
+            #     if i == len(self.checkpoint_list) - 1:
+            #         cohyponymtask_using_weights.guess_accuracy_best_df.to_csv(
+            #             self.current_dir + '/weight_guess_accuracy.csv')
+            #         cohyponymtask_using_hidden.guess_accuracy_best_df.to_csv(
+            #             self.current_dir + '/hidden_guess_accuracy.csv')
+            #         cohyponymtask_using_outputs.guess_accuracy_best_df.to_csv(
+            #             self.current_dir + '/outputs_guess_accuracy.csv')
+            #
+            # temp_gpts_cohyponymtask_using_weights_df = self.merge_data_from_checkpoints(
+            #     gpt_cohyponymtask_using_weights_list, self.gpts_cohyponymtask_using_weights_df_list)
+            # temp_gpts_cohyponymtask_using_hidden_df = self.merge_data_from_checkpoints(
+            #     gpt_cohyponymtask_using_hidden_activation_list, self.gpts_cohyponymtask_using_hidden_df_list)
+            # temp_gpts_cohyponymtask_using_outputs_df = self.merge_data_from_checkpoints(
+            #     gpt_cohyponymtask_using_output_activation_list, self.gpts_cohyponymtask_using_outputs_df_list)
+            #
+            # temp_gpts_sim_score_using_hidden_df = self.merge_data_from_checkpoints(
+            #     gpt_sim_score_using_hidden_activation_list, self.gpts_sim_score_using_hidden_df_list)
+            # temp_gpts_sim_score_using_weights_df = self.merge_data_from_checkpoints(
+            #     gpt_sim_score_using_weights_list, self.gpts_sim_score_using_weights_df_list)
+            # temp_gpts_sim_score_using_outputs_df = self.merge_data_from_checkpoints(
+            #     gpt_sim_score_using_output_activation_list, self.gpts_sim_score_using_outputs_df_list)
+            #
+            # temp_gpts_syntagmatictask_using_sum_outputs_df = self.merge_data_from_checkpoints(
+            #     gpt_syntagmatictask_using_sum_outputs_list, self.gpts_syntagmatictask_using_sum_outputs_df_list)
+            # temp_gpts_syntagmatictask_using_mean_outputs_df = self.merge_data_from_checkpoints(
+            #     gpt_syntagmatictask_using_mean_outputs_list, self.gpts_syntagmatictask_using_mean_outputs_df_list)
+            # temp_gpts_syntagmatictask_using_weights_df = self.merge_data_from_checkpoints(
+            #     gpt_syntagmatictask_using_weights_list, self.gpts_syntagmatictask_using_weights_df_list)
+            # temp_gpts_syntagmatictask_using_hidden_df = self.merge_data_from_checkpoints(
+            #     gpt_syntagmatictask_using_hidden_list, self.gpts_syntagmatictask_using_hidden_df_list)
+            #
+            # plot_prediction_accuracy(temp_gpts_syntagmatictask_using_sum_outputs_df,
+            #                          temp_gpts_syntagmatictask_using_mean_outputs_df,
+            #                          self.current_dir + '/sum_prediction_activation_outputs_plot.png')
+            # plot_cohyponym_score(temp_gpts_cohyponymtask_using_weights_df, temp_gpts_cohyponymtask_using_hidden_df,
+            #                      self.current_dir + '/cohyponym_plot.png')
+            # plot_sim_score(temp_gpts_sim_score_using_hidden_df, 'hidden', self.current_dir + '/sim_score_plot.png')
+            # plot_confusion_matrix(hidden_sim_df, self.current_dir + '/confusion_matrix_plot.png')
+            #
+            # i += 1
 
     def combine_and_export_data(self, data_list, keys, dir):
         vocab_list = list(self.gpt_list[0].vocab_id_dict.keys())
@@ -245,21 +332,21 @@ class GPTEvaluation:
         average_dir = self.current_dir + '_average'
         os.makedirs(average_dir, exist_ok=True)
         # syntagmatictask_using_weights_df = self.average_over_multiple_models(gpts_syntagmatictask_using_weights_df_list, self.merge_data_from_checkpoints(gpt_syntagmatictask_using_weights_list,gpts_syntagmatictask_using_weights_df_list))
-        cohyponymtask_using_weights_df = self.average_over_multiple_models(
-            self.gpts_cohyponymtask_using_weights_df_list)
-        cohyponymtask_using_hidden_df = self.average_over_multiple_models(self.gpts_cohyponymtask_using_hidden_df_list)
+        # cohyponymtask_using_weights_df = self.average_over_multiple_models(
+        #     self.gpts_cohyponymtask_using_weights_df_list)
+        # cohyponymtask_using_hidden_df = self.average_over_multiple_models(self.gpts_cohyponymtask_using_hidden_df_list)
         sim_score_using_hidden_df = self.average_over_multiple_models(self.gpts_sim_score_using_hidden_df_list)
-        syntagmatictask_using_sum_outputs_df = self.average_over_multiple_models(
-            self.gpts_syntagmatictask_using_sum_outputs_df_list)
+        # syntagmatictask_using_sum_outputs_df = self.average_over_multiple_models(
+        #     self.gpts_syntagmatictask_using_sum_outputs_df_list)
         syntagmatictask_using_mean_outputs_df = self.average_over_multiple_models(
             self.gpts_syntagmatictask_using_mean_outputs_df_list)
-        plot_prediction_accuracy(syntagmatictask_using_sum_outputs_df,
+        plot_prediction_accuracy(
                                  syntagmatictask_using_mean_outputs_df,
                                  average_dir + '/sum_prediction_activation_outputs_plot.png')
-        plot_cohyponym_score(cohyponymtask_using_weights_df, cohyponymtask_using_hidden_df,
-                             average_dir + '/cohyponym_average_plot.png')
+        # plot_cohyponym_score(cohyponymtask_using_weights_df, cohyponymtask_using_hidden_df,
+        #                      average_dir + '/cohyponym_average_plot.png')
         plot_sim_score(sim_score_using_hidden_df, 'hidden', self.current_dir + '/sim_score_plot.png')
 
 
 eval = GPTEvaluation()
-eval.average_results()
+# eval.average_results()

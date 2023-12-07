@@ -36,9 +36,10 @@ param2requests = {
 
     # model params
     'num_epochs': [5000],
-    'hidden_size': [16, 8],
+    'hidden_size': [1, 2, 3],
+    'attention_size': [1, 2, 3],
     # 'learning_rate': [0.001],
-    'embed_size': [12, 8, 6],
+    'embed_size': [1, 2, 3],
     # 'embed_init_range': [0.3],
     # 'momentum': [0.0],
     # 'random_seed': [1023]
@@ -108,6 +109,7 @@ elif DSM_NAME == 'gpt':
         'num_epochs': 200,
         'embed_size': 64,
         'hidden_size': 64,
+        'attention_size': 64,
         'num_heads': 1,
         'num_layer': 1,
         'learning_rate': 0.0005
@@ -302,6 +304,7 @@ class GPTParams:
     num_epochs: int
     embed_size: int
     hidden_size: int
+    attention_size: int
     num_heads: int
     num_layer: int
     learning_rate: float

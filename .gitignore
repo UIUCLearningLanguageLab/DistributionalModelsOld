@@ -10,3 +10,4 @@ runs/
 corpus_info/
 from_ludwig/
 results/
+get_results.py

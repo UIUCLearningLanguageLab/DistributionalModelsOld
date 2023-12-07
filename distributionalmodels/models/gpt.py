@@ -98,6 +98,7 @@ class GPT:
         self.model = BigramLanguageModel(self.vocab_size,
                                          self.params.embed_size,
                                          self.block_size,
+                                         self.params.attention_size,
                                          self.params.hidden_size,
                                          self.params.num_heads,
                                          self.device)
@@ -161,27 +162,34 @@ class GPT:
                 if prediction == target_sequences[i]:
                     correctness += 1
 
-            print(self.decode(input_sequences))
-
-            for input, prediction, target in zip(self.decode(input_sequences), self.decode(predictions),
-                                                 self.decode(target_sequences)):
-                print(f"Item: {input}, Predicted: {prediction}, Target: {target}")
-        print(f'accuracy: {correctness/(total_seq * self.block_size)}')
+        #     print(self.decode(input_sequences))
+        #
+        #     for input, prediction, target in zip(self.decode(input_sequences), self.decode(predictions),
+        #                                          self.decode(target_sequences)):
+        #         print(f"Item: {input}, Predicted: {prediction}, Target: {target}")
+        # print(f'accuracy: {correctness/(total_seq * self.block_size)}')
 
     @torch.no_grad()
-    def get_multihead_outputs(self, numeric_document_list):
+    def get_embeds(self, numeric_document_list):
         self.multihead_outputs = []
         self.attention_weights = []
+        self.input_activations = []
+        self.hidden_activations = []
         self.model.eval()
         multihead_forward_hook = self.model.sa_head.register_forward_hook(self.multihead_forward_hook)
-        multihead_inputs = []
+        input_hook = self.model.combined_input_module.register_forward_hook(self.input_hook)
+        hidden_hook = self.model.ffwd.register_forward_hook(self.hidden_hook)
+        inputs = []
         o_probs = []
         for contexts, targets in self.get_batch(numeric_document_list):
             logits, loss, o_prob = self.model(contexts, targets)
-            multihead_inputs.append(contexts)
+            inputs.append(contexts)
             o_probs.append(o_prob)
         multihead_forward_hook.remove()
-        return self.multihead_outputs, self.attention_weights, multihead_inputs, o_probs
+        input_hook.remove()
+        hidden_hook.remove()
+        return self.input_activations, self.hidden_activations, self.multihead_outputs, \
+               self.attention_weights, inputs, o_probs
 
     @torch.no_grad()
     def get_kqv_outputs(self, numeric_document_list):
@@ -250,6 +258,12 @@ class GPT:
         self.multihead_outputs.append(combined_output)
         self.attention_weights.append(attention_weight)
 
+    def input_hook(self, module, input, output):
+        self.input_activations.append(output)
+
+    def hidden_hook(self, module, input, output):
+        self.hidden_activations.append(output)
+
     def key_hook(self, module, input, output):
         self.key_outputs.append(output)
 
@@ -260,9 +274,22 @@ class GPT:
         self.value_outputs.append(output)
 
 
+class CombinedInput(nn.Module):
+    def __init__(self, token_embeddings_table, position_embeddings_table, device):
+        super().__init__()
+        self.token_embeddings_table = token_embeddings_table
+        self.position_embeddings_table = position_embeddings_table
+        self.device = device
+
+    def forward(self, idx, T):
+        token_embed = self.token_embeddings_table(idx)
+        position_embed = self.position_embeddings_table(torch.arange(T, device=self.device))
+        combined_input = token_embed + position_embed
+        return combined_input
+
 
 class BigramLanguageModel(nn.Module):
-    def __init__(self, vocab_size, embed_size, block_size, hidden_size, num_head, device):
+    def __init__(self, vocab_size, embed_size, block_size, attention_size, hidden_size, num_head, device):
         super().__init__()
         # self.vocab_size = vocab_size
         # self.embed_size = embed_size
@@ -270,17 +297,20 @@ class BigramLanguageModel(nn.Module):
         self.device = device
         self.token_embeddings_table = nn.Embedding(vocab_size, embed_size).to(self.device)
         self.position_embeddings_table = nn.Embedding(block_size, embed_size).to(self.device)
-        self.sa_head = MultiHeadAttention(num_head, embed_size // num_head, embed_size, block_size)
-        self.ffwd = FeedForward(embed_size, hidden_size)
+        self.combined_input_module = CombinedInput(self.token_embeddings_table, self.position_embeddings_table,
+                                                   self.device)
+        self.sa_head = MultiHeadAttention(num_head, attention_size // num_head, embed_size, block_size)
+        self.ffwd = FeedForward(attention_size, hidden_size)
         self.lm_head = nn.Linear(hidden_size, vocab_size)
 
     def forward(self, idx, targets):
         B, T = idx.shape
         # idx and targets are both (B, T)
-        token_embed = self.token_embeddings_table(idx)  # (Batch*Time*embed_size)
-        position_embed = self.position_embeddings_table(torch.arange(T, device=self.device))
-        x = token_embed + position_embed
-        x, attention_weights = self.sa_head(x)
+        # token_embed = self.token_embeddings_table(idx)  # (Batch*Time*embed_size)
+        # position_embed = self.position_embeddings_table(torch.arange(T, device=self.device))
+        # combined_input = token_embed + position_embed
+        combined_input = self.combined_input_module(idx, T)
+        x, attention_weights = self.sa_head(combined_input)
         x = self.ffwd(x)
         logits = self.lm_head(x)  # (Batch*Time*vocab_size)
         B, T, C = logits.shape

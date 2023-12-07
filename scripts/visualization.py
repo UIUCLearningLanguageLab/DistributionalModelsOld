@@ -48,13 +48,14 @@ def plot_confusion_matrix(confusion_matrix, fig_savepath):
     plt.clf()
 
 
-def plot_prediction_accuracy(sum_df, mean_df, fig_savepath):
-    fig, axs = plt.subplots(2, 2, sharex=False, sharey=False, figsize=(10, 10))
-    for column in range(2):
+def plot_prediction_accuracy(mean_df, fig_savepath):
+    fig, axs = plt.subplots(2, 1, sharex=False, sharey=False, figsize=(10, 10))
+    for column in range(1):
+        # if column == 0:
+        #     grouped_df = sum_df.groupby(sum_df.input)
+        #     title = 'Sum Output Activations'
+        # else:
         if column == 0:
-            grouped_df = sum_df.groupby(sum_df.input)
-            title = 'Sum Output Activations'
-        else:
             grouped_df = mean_df.groupby(mean_df.input)
             title = 'Mean Output Activations'
         for row in range(2):
@@ -63,23 +64,23 @@ def plot_prediction_accuracy(sum_df, mean_df, fig_savepath):
             df_input = None
             if row == 0:
                 df_input = grouped_df.get_group('A')
-                axs[row, column].set_title(title, fontsize=15)
+                axs[row].set_title(title, fontsize=15)
             else:
                 df_input = grouped_df.get_group('y')
             for i, color in zip(range(len(categories)), color_cycle):
                 label = categories[i]
                 x = df_input.checkpoint
                 y = df_input[label]
-                axs[row, column].plot(x, y, label=label, color=color)
+                axs[row].plot(x, y, label=label, color=color)
                 pos_x = x.iloc[round(len(x)-1 * 0.8)]
                 pos_y = y.iloc[round(len(x)-1 * 0.8)]
-                texts.append(axs[row, column].annotate(label, xy=(pos_x, pos_y), fontsize=10, color=color))
-            axs[row, column].set_ylabel('Output Activation', fontsize=13)
-            axs[row, column].set_xlabel('Epochs', fontsize=13)
+                texts.append(axs[row].annotate(label, xy=(pos_x, pos_y), fontsize=10, color=color))
+            axs[row].set_ylabel('Output Activation', fontsize=13)
+            axs[row].set_xlabel('Epochs', fontsize=13)
             # axs[row, column].legend(loc = 'upper right', prop={'size':10})
-            axs[row, column].set_ylim(-0.1, 1.1)
-            axs[row, column].set_yticks(np.arange(0, 1.1, 0.1))
-            adjust_text(texts, ax=axs[row, column], expand_text=(1.2, 1.2), only_move={'points': 'xy', 'text': 'x'})
+            axs[row].set_ylim(-0.1, 1.1)
+            axs[row].set_yticks(np.arange(0, 1.1, 0.1))
+            adjust_text(texts, ax=axs[row], expand_text=(1.2, 1.2), only_move={'points': 'xy', 'text': 'x'})
 
     plt.subplots_adjust(wspace=0.2, hspace=0.2)
     plt.tight_layout(pad=1.0, w_pad=0.5, h_pad=0.9)
